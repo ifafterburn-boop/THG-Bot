@@ -1,61 +1,77 @@
+import os
 import discord
 from discord.ext import commands
-import os
+from dotenv import load_dotenv
 
-# 🔧 CONFIG
-GUILD_ID = 1532784516677111959  # your server ID
+# Load environment variables
+load_dotenv()
 
-# 🔥 Intents
+TOKEN = os.getenv("TOKEN")
+
+# Intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+# Bot
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents,
+    help_command=None
+)
 
 
-# 🚀 READY EVENT
-@bot.event
-async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
-
-    # 🔌 LOAD COGS
+# Load all cogs
+async def load_cogs():
     print("⚙️ Loading cogs...")
-    for file in os.listdir("./cogs"):
-        if file.endswith(".py"):
+
+    for filename in os.listdir("./cogs"):
+        if filename.endswith(".py") and filename != "__init__.py":
             try:
-                await bot.load_extension(f"cogs.{file[:-3]}")
-                print(f"✅ Loaded cog: {file}")
+                await bot.load_extension(f"cogs.{filename[:-3]}")
+                print(f"✅ Loaded cog: {filename}")
             except Exception as e:
-                print(f"❌ Failed to load {file}: {e}")
-
-    # ⚡ FORCE GUILD SYNC (INSTANT COMMANDS)
-    try:
-        guild = discord.Object(id=GUILD_ID)
-
-        bot.tree.copy_global_to(guild=guild)
-        synced = await bot.tree.sync(guild=guild)
-
-        print(f"⚡ Synced {len(synced)} command(s) to guild")
-    except Exception as e:
-        print(f"❌ Sync error: {e}")
+                print(f"❌ Failed to load {filename}: {e}")
 
 
-# 🔄 DEBUG CONNECT
 @bot.event
 async def on_connect():
-    print("🔄 Bot connected...")
+    print("🔄 Connected to Discord...")
 
 
-# 🧪 OPTIONAL: DEBUG COMMAND
-@bot.tree.command(name="test", description="Test command")
+@bot.event
+async def on_ready():
+    print("=" * 40)
+    print(f"✅ Logged in as {bot.user}")
+    print(f"🆔 Bot ID: {bot.user.id}")
+    print(f"🌐 Servers: {len(bot.guilds)}")
+    print("=" * 40)
+
+    # Sync global slash commands
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} global command(s).")
+    except Exception as e:
+        print(f"❌ Sync failed: {e}")
+
+
+@bot.tree.command(name="test", description="Test slash command")
 async def test(interaction: discord.Interaction):
-    await interaction.response.send_message("✅ Slash commands working!")
+    await interaction.response.send_message(
+        "✅ Slash commands are working!"
+    )
 
 
-# ▶️ RUN
-TOKEN = os.getenv("TOKEN")
+async def main():
+    async with bot:
+        await load_cogs()
 
-if not TOKEN:
-    print("❌ TOKEN not found! Add it in Railway variables.")
-else:
-    bot.run(TOKEN)
+        if TOKEN:
+            await bot.start(TOKEN)
+        else:
+            print("❌ TOKEN environment variable not found!")
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
