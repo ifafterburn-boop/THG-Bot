@@ -207,61 +207,53 @@ class CreateTicketView(View):
         super().__init__(timeout=None)
         self.bot = bot
 
-    @discord.ui.button(
-        label="Create Ticket",
-        emoji="📩",
-        style=discord.ButtonStyle.green,
-        custom_id="create_ticket"
-    )
-    async def create_ticket(
-        self,
-        interaction: discord.Interaction,
-        button: Button
-    ):
-        guild = interaction.guild
-        member = interaction.user
+@discord.ui.button(
+    label="Create Ticket",
+    emoji="📩",
+    style=discord.ButtonStyle.green,
+    custom_id="create_ticket"
+)
+async def create_ticket(
+    self,
+    interaction: discord.Interaction,
+    button: Button
+):
+    guild = interaction.guild
+    member = interaction.user
 
-        support_role = guild.get_role(SUPPORT_ROLE_ID)
-        category = guild.get_channel(CATEGORY_ID)
+    support_role = guild.get_role(SUPPORT_ROLE_ID)
+    category = guild.get_channel(CATEGORY_ID)
 
-        # Prevent duplicate tickets
-        existing = find_existing_ticket(category, member.id)
+    # REMOVED duplicate ticket check - users can now create multiple tickets
 
-        if existing:
-            await interaction.response.send_message(
-                f"❌ You already have an open ticket:\n{existing.mention}",
-                ephemeral=True
-            )
-            return
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(
+            view_channel=False
+        ),
+        member: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            attach_files=True,
+            embed_links=True,
+            read_message_history=True
+        ),
+        support_role: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            manage_messages=True,
+            manage_channels=True,
+            read_message_history=True
+        ),
+        guild.me: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            manage_channels=True
+        )
+    }
 
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(
-                view_channel=False
-            ),
-            member: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                attach_files=True,
-                embed_links=True,
-                read_message_history=True
-            ),
-            support_role: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_messages=True,
-                manage_channels=True,
-                read_message_history=True
-            ),
-            guild.me: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_channels=True
-            )
-        }
-
-        channel = await guild.create_text_channel(
-            name=get_ticket_name(),
-            category=category,
+    channel = await guild.create_text_channel(
+        name=get_ticket_name(),
+        category=category,
             overwrites=overwrites,
             topic=str(member.id)
         )
