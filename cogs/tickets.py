@@ -17,6 +17,188 @@ EMBED_COLOR = 0x57F287
 
 
 # ==========================
+# TICKET ACTIONS VIEW (Claim & Close)
+# ==========================
+
+class TicketActionsView(View):
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+
+    @discord.ui.button(
+        label="Claim Ticket",
+        emoji="🙋",
+        style=discord.ButtonStyle.blurple,
+        custom_id="claim_ticket"
+    )
+    async def claim_ticket(
+        self,
+        interaction: discord.Interaction,
+        button: Button
+    ):
+        # Only support role can claim
+        support_role = interaction.guild.get_role(SUPPORT_ROLE_ID)
+        if support_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only support staff can claim tickets.",
+                ephemeral=True
+            )
+            return
+
+        # Check if ticket is already claimed
+        channel = interaction.channel
+        for embed in channel.embeds:
+            if "Status:" in str(embed.to_dict().get("fields", [])):
+                # Update status to "Claimed"
+                new_embed = discord.Embed.from_dict(embed.to_dict())
+                for i, field in enumerate(new_embed.fields):
+                    if field.name == "📋 Ticket Information":
+                        value = field.value
+                        value = value.replace("🟢 Open", f"🙋 Claimed by {interaction.user.mention}")
+                        new_embed.set_field_at(i, name="📋 Ticket Information", value=value, inline=False)
+                        break
+                
+                await channel.edit(embed=new_embed)
+                await interaction.response.send_message(
+                    f"✅ Ticket claimed by {interaction.user.mention}!",
+                    ephemeral=True
+                )
+                return
+
+        await interaction.response.send_message(
+            "❌ Could not claim ticket.",
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="Close Ticket",
+        emoji="🔒",
+        style=discord.ButtonStyle.red,
+        custom_id="close_ticket"
+    )
+    async def close_ticket(
+        self,
+        interaction: discord.Interaction,
+        button: Button
+    ):
+        support_role = interaction.guild.get_role(SUPPORT_ROLE_ID)
+        
+        # Allow both support staff and ticket owner to close
+        channel = interaction.channel
+        ticket_owner_id = int(channel.topic) if channel.topic and channel.topic.isdigit() else None
+        
+        is_support = support_role in interaction.user.roles
+        is_owner = ticket_owner_id == interaction.user.id
+        
+        if not is_support and not is_owner:
+            await interaction.response.send_message(
+                "❌ You don't have permission to close this ticket.",
+                ephemeral=True
+            )
+            return
+
+        # Confirmation view
+        confirm_view = ConfirmCloseView(self.bot)
+        await interaction.response.send_message(
+            "⚠️ Are you sure you want to close this ticket?",
+            view=confirm_view,
+            ephemeral=True
+        )
+
+
+# ==========================
+# CONFIRM CLOSE VIEW
+# ==========================
+
+class ConfirmCloseView(View):
+    def __init__(self, bot):
+        super().__init__(timeout=30)
+        self.bot = bot
+
+    @discord.ui.button(
+        label="Yes, Close",
+        emoji="✅",
+        style=discord.ButtonStyle.danger,
+        custom_id="confirm_close"
+    )
+    async def confirm_close(
+        self,
+        interaction: discord.Interaction,
+        button: Button
+    ):
+        channel = interaction.channel
+        member_id = int(channel.topic) if channel.topic and channel.topic.isdigit() else None
+        
+        # Get log channel
+        log_channel = interaction.guild.get_channel(LOG_CHANNEL_ID)
+        
+        # Create log embed
+        log_embed = discord.Embed(
+            title="🔒 Ticket Closed",
+            description=(
+                f"**Ticket:** {channel.name}\n"
+                f"**Closed by:** {interaction.user.mention}\n"
+                f"**User:** <@{member_id}>" if member_id else f"**User:** Unknown"
+            ),
+            color=0xED4245,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        # Send log to log channel
+        if log_channel:
+            await log_channel.send(embed=log_embed)
+        
+        # Update embed status to Closed
+        for embed in channel.embeds:
+            new_embed = discord.Embed.from_dict(embed.to_dict())
+            for i, field in enumerate(new_embed.fields):
+                if field.name == "📋 Ticket Information":
+                    value = field.value
+                    value = value.replace("🟢 Open", "🔴 Closed")
+                    new_embed.set_field_at(i, name="📋 Ticket Information", value=value, inline=False)
+                    break
+            await channel.edit(embed=new_embed)
+            break
+
+        # Send closing message
+        await interaction.response.send_message(
+            "🔒 Ticket is being closed...",
+            ephemeral=True
+        )
+        
+        # Disable permissions and rename channel
+        await channel.set_permissions(interaction.guild.default_role, view_channel=False)
+        if member_id:
+            member = interaction.guild.get_member(member_id)
+            if member:
+                await channel.set_permissions(member, view_channel=False)
+        
+        # Rename channel to indicate closed
+        if not channel.name.startswith("closed-"):
+            await channel.edit(name=f"closed-{channel.name}")
+        
+        # Delete channel after delay (15 seconds)
+        await asyncio.sleep(15)
+        await channel.delete()
+
+    @discord.ui.button(
+        label="Cancel",
+        emoji="❌",
+        style=discord.ButtonStyle.grey,
+        custom_id="cancel_close"
+    )
+    async def cancel_close(
+        self,
+        interaction: discord.Interaction,
+        button: Button
+    ):
+        await interaction.response.edit_message(
+            content="✅ Ticket close cancelled.",
+            view=None
+        )
+
+
+# ==========================
 # CREATE TICKET BUTTON
 # ==========================
 
@@ -121,7 +303,8 @@ class CreateTicketView(View):
 
         await channel.send(
             content=f"{member.mention} {support_role.mention}",
-            embed=embed
+            embed=embed,
+            view=TicketActionsView(self.bot)  # <-- Add Claim & Close buttons here
         )
 
         await interaction.response.send_message(
@@ -137,8 +320,9 @@ class CreateTicketView(View):
 class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Persistent View
+        # Persistent Views
         self.bot.add_view(CreateTicketView(bot))
+        self.bot.add_view(TicketActionsView(bot))
 
     @app_commands.command(
         name="ticketpanel",
