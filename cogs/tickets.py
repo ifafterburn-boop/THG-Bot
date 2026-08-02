@@ -36,7 +36,6 @@ class CreateTicketView(View):
         interaction: discord.Interaction,
         button: Button
     ):
-
         guild = interaction.guild
         member = interaction.user
 
@@ -45,19 +44,18 @@ class CreateTicketView(View):
 
         # Prevent duplicate tickets
         existing = find_existing_ticket(category, member.id)
-      
-if existing:
-    await interaction.response.send_message(
-        f"❌ You already have an open ticket:\n{existing.mention}",
-        ephemeral=True
-    )
-    return
+
+        if existing:
+            await interaction.response.send_message(
+                f"❌ You already have an open ticket:\n{existing.mention}",
+                ephemeral=True
+            )
+            return
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=False
             ),
-
             member: discord.PermissionOverwrite(
                 view_channel=True,
                 send_messages=True,
@@ -65,7 +63,6 @@ if existing:
                 embed_links=True,
                 read_message_history=True
             ),
-
             support_role: discord.PermissionOverwrite(
                 view_channel=True,
                 send_messages=True,
@@ -73,7 +70,6 @@ if existing:
                 manage_channels=True,
                 read_message_history=True
             ),
-
             guild.me: discord.PermissionOverwrite(
                 view_channel=True,
                 send_messages=True,
@@ -89,39 +85,39 @@ if existing:
         )
 
         embed = discord.Embed(
-    title="🎫 THG Utilities Support",
-    description=(
-        f"Welcome {member.mention}!\n\n"
-        "Thank you for opening a support ticket.\n"
-        "Please describe your issue in as much detail as possible.\n\n"
-        "A member of our support team will assist you shortly."
-    ),
-    color=EMBED_COLOR
-)
+            title="🎫 THG Utilities Support",
+            description=(
+                f"Welcome {member.mention}!\n\n"
+                "Thank you for opening a support ticket.\n"
+                "Please describe your issue in as much detail as possible.\n\n"
+                "A member of our support team will assist you shortly."
+            ),
+            color=EMBED_COLOR
+        )
 
-embed.add_field(
-    name="📋 Ticket Information",
-    value=(
-        f"**User:** {member.mention}\n"
-        f"**Ticket ID:** `{channel.name}`\n"
-        f"**Status:** 🟢 Open"
-    ),
-    inline=False
-)
+        embed.add_field(
+            name="📋 Ticket Information",
+            value=(
+                f"**User:** {member.mention}\n"
+                f"**Ticket ID:** `{channel.name}`\n"
+                f"**Status:** 🟢 Open"
+            ),
+            inline=False
+        )
 
-embed.add_field(
-    name="📜 Rules",
-    value=(
-        "• Be respectful.\n"
-        "• Do not spam or ping staff.\n"
-        "• Stay on the topic of this ticket."
-    ),
-    inline=False
-)
+        embed.add_field(
+            name="📜 Rules",
+            value=(
+                "• Be respectful.\n"
+                "• Do not spam or ping staff.\n"
+                "• Stay on the topic of this ticket."
+            ),
+            inline=False
+        )
 
-embed.set_footer(
-    text="THG Utilities • Support System"
-)
+        embed.set_footer(
+            text="THG Utilities • Support System"
+        )
 
         await channel.send(
             content=f"{member.mention} {support_role.mention}",
@@ -132,7 +128,8 @@ embed.set_footer(
             f"✅ Your ticket has been created: {channel.mention}",
             ephemeral=True
         )
-      
+
+
 # ==========================
 # TICKET PANEL COMMAND
 # ==========================
@@ -140,7 +137,6 @@ embed.set_footer(
 class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
         # Persistent View
         self.bot.add_view(CreateTicketView(bot))
 
@@ -150,7 +146,6 @@ class Tickets(commands.Cog):
     )
     @app_commands.default_permissions(administrator=True)
     async def ticketpanel(self, interaction: discord.Interaction):
-
         panel_channel = interaction.guild.get_channel(PANEL_CHANNEL_ID)
 
         if panel_channel is None:
@@ -224,8 +219,13 @@ class Tickets(commands.Cog):
         await interaction.response.send_message(
             "✅ Ticket panel sent successfully.",
             ephemeral=True
-      )
-      
+        )
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        print("✅ Tickets Cog Loaded")
+
+
 # ==========================
 # HELPER FUNCTIONS
 # ==========================
@@ -246,14 +246,10 @@ def find_existing_ticket(category, user_id):
             return channel
     return None
 
+
 # ==========================
 # COG SETUP
 # ==========================
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        print("✅ Tickets Cog Loaded")
-
 
 async def setup(bot):
     await bot.add_cog(Tickets(bot))
